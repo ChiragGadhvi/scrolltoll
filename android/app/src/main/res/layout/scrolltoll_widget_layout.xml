@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D0D0D"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Today's Toll"
+        android:textColor="#999999"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_amount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="&#8377;0"
+        android:textColor="#FF6B35"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <ProgressBar
+        android:id="@+id/widget_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="6dp"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="#FF6B35"
+        android:progressBackgroundTint="#333333" />
+
+    <TextView
+        android:id="@+id/widget_compare"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="vs yesterday"
+        android:textColor="#666666"
+        android:textSize="9sp"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>

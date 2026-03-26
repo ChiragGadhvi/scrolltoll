@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /e/scrolltoll -type d -not -path */build/* -not -path */.dart_tool/* -not -path */.gradle/* -not -path */.idea/* -not -path */.kotlin/*)",
+      "Bash(flutter pub:*)"
+    ]
+  }
+}
