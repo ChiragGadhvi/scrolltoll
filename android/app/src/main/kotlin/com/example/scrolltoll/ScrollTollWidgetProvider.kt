@@ -25,24 +25,29 @@ class ScrollTollWidgetProvider : AppWidgetProvider() {
             val prefs: SharedPreferences = context.getSharedPreferences(
                 "HomeWidgetPreferences", Context.MODE_PRIVATE
             )
-            val todayAmount = prefs.getString("today_amount", "0")?.toFloatOrNull() ?: 0f
-            val yesterdayAmount = prefs.getString("yesterday_amount", "0")?.toFloatOrNull() ?: 0f
+            val todayAmountString = prefs.getString("today_amount", "0")
+            val todayAmount = todayAmountString?.toFloatOrNull() ?: 0f
+            
+            val budgetString = prefs.getString("daily_budget", "150")
+            val budget = budgetString?.toFloatOrNull() ?: 150f
 
+            val amountLeft = Math.max(0f, budget - todayAmount)
+            val percentLeft = Math.max(0f, amountLeft / budget)
+            
             val views = RemoteViews(context.packageName, R.layout.scrolltoll_widget_layout)
-            views.setTextViewText(R.id.widget_amount, "\u20B9${todayAmount.toInt()}")
 
-            val progress = if (yesterdayAmount > 0) {
-                ((todayAmount / yesterdayAmount) * 100).toInt().coerceAtMost(100)
-            } else 50
-            views.setProgressBar(R.id.widget_progress, 100, progress, false)
-
-            val compareText = when {
-                yesterdayAmount <= 0 -> "vs yesterday"
-                todayAmount > yesterdayAmount -> "\u25B2 more than yesterday"
-                todayAmount < yesterdayAmount -> "\u25BC less than yesterday"
-                else -> "same as yesterday"
+            // Map percentageRemaining logic
+            val imageRes = when {
+                percentLeft >= 0.8f -> R.drawable.jar_stage_1_full
+                percentLeft >= 0.6f -> R.drawable.jar_stage_2_high
+                percentLeft >= 0.4f -> R.drawable.jar_stage_3_half
+                percentLeft >= 0.2f -> R.drawable.jar_stage_4_low
+                else -> R.drawable.jar_stage_5_empty
             }
-            views.setTextViewText(R.id.widget_compare, compareText)
+
+            views.setImageViewResource(R.id.widget_jar_image, imageRes)
+            views.setTextViewText(R.id.widget_amount, "₹${amountLeft.toInt()} left")
+            views.setProgressBar(R.id.widget_progress, 100, (percentLeft * 100).toInt(), false)
 
             val intent = Intent(context, MainActivity::class.java)
             val pendingIntent = PendingIntent.getActivity(

@@ -22,6 +22,9 @@ class HiveService {
   static double get monthlySalary => settings.get('monthly_salary', defaultValue: 0.0) as double;
   static set monthlySalary(double v) => settings.put('monthly_salary', v);
 
+  static double get dailyBudget => settings.get('daily_budget', defaultValue: 150.0) as double;
+  static set dailyBudget(double v) => settings.put('daily_budget', v);
+
   static bool get notificationsEnabled => settings.get('notifications_enabled', defaultValue: true) as bool;
   static set notificationsEnabled(bool v) => settings.put('notifications_enabled', v);
 

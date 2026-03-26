@@ -3,45 +3,42 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#0D0D0D"
-    android:padding="12dp">
+    android:orientation="horizontal"
+    android:background="@drawable/widget_bg"
+    android:padding="16dp"
+    android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/widget_title"
-        android:layout_width="wrap_content"
+    <ImageView
+        android:id="@+id/widget_jar_image"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:src="@drawable/jar_stage_1_full" />
+
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Today's Toll"
-        android:textColor="#999999"
-        android:textSize="11sp" />
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="16dp">
 
-    <TextView
-        android:id="@+id/widget_amount"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="&#8377;0"
-        android:textColor="#FF6B35"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widget_amount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="₹0 left"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
-    <ProgressBar
-        android:id="@+id/widget_progress"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
-        android:layout_marginTop="6dp"
-        android:max="100"
-        android:progress="0"
-        android:progressTint="#FF6B35"
-        android:progressBackgroundTint="#333333" />
-
-    <TextView
-        android:id="@+id/widget_compare"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="vs yesterday"
-        android:textColor="#666666"
-        android:textSize="9sp"
-        android:layout_marginTop="2dp" />
-
+        <ProgressBar
+            android:id="@+id/widget_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="100"
+            android:progressTint="#FF6B35"
+            android:progressBackgroundTint="#333333" />
+    </LinearLayout>
 </LinearLayout>

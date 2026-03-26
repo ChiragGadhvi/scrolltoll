@@ -7,6 +7,7 @@ import '../services/hive_service.dart';
 import '../services/notification_service.dart';
 import '../services/usage_stats_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/time_value_jar.dart';
 import '../utils/money_calculator.dart';
 import '../widgets/app_usage_tile.dart';
 import '../widgets/today_summary_card.dart';
@@ -113,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
       final yTotal = HiveService.getDailyTotal(yk);
       await HomeWidget.saveWidgetData<String>('today_amount', todayAmount.toString());
+      await HomeWidget.saveWidgetData<String>('daily_budget', HiveService.dailyBudget.toString());
       await HomeWidget.saveWidgetData<String>(
         'yesterday_amount',
         (yTotal?.totalMoney ?? 0.0).toString(),
@@ -353,15 +355,57 @@ class _DashboardTab extends StatelessWidget {
                     ),
                   ),
 
-                  // ── Permission banner or summary card ──
+                  // ── Premium Jar Header ──
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
                       child: permissionMissing
                           ? _PermissionBanner(onGrant: onRequestPermission)
-                          : TodaySummaryCard(
-                              totalMoney: totalMoney,
-                              totalMinutes: totalMinutes,
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  "Today's Time Value",
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: const Color(0xFF8A8A8A),
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TweenAnimationBuilder<double>(
+                                  duration: const Duration(milliseconds: 1200),
+                                  curve: Curves.easeOutExpo,
+                                  tween: Tween<double>(begin: 0, end: totalMoney),
+                                  builder: (context, value, child) {
+                                    return Text(
+                                      "₹${value.toInt()}",
+                                      style: textTheme.displaySmall?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: -1,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 24),
+                                TimeValueJar(
+                                  percentageRemaining: (1.0 - (totalMoney / HiveService.dailyBudget)).clamp(0.0, 1.0),
+                                  size: 200,
+                                ),
+                                const SizedBox(height: 24),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 300),
+                                  child: Text(
+                                    _getJarCaption(totalMoney, HiveService.dailyBudget),
+                                    key: ValueKey(totalMoney),
+                                    textAlign: TextAlign.center,
+                                    style: textTheme.bodySmall?.copyWith(
+                                      color: const Color(0xFF8A8A8A),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                   ),
@@ -415,7 +459,19 @@ class _DashboardTab extends StatelessWidget {
             ),
     );
   }
+
+  String _getJarCaption(double current, double budget) {
+    if (current == 0) return "A perfect blank slate. Keep it up.";
+    final ratio = current / budget;
+    if (ratio < 0.2) return "You're doing great. Stay focused.";
+    if (ratio < 0.5) return "Value is draining, but you're in control.";
+    if (ratio < 0.8) return "Jar is getting low. Time to wrap up.";
+    if (ratio < 1.0) return "Critical limits. Close the apps.";
+    return "Budget exceeded. You've wasted your value today.";
+  }
 }
+
+// ─── Permission Banner ────────────────────────────────────────────────────────
 
 class _PermissionBanner extends StatelessWidget {
   final VoidCallback onGrant;
