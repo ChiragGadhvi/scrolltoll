@@ -57,8 +57,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final salary = HiveService.monthlySalary;
-    final apps = await UsageStatsService.getTodayUsage(salary);
+    final apps = await UsageStatsService.getTodayUsage();
     final totalMoney = apps.fold(0.0, (s, a) => s + a.moneyCost);
     final totalMinutes = apps.fold(0, (s, a) => s + a.durationMinutes);
 
@@ -77,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final pastKey =
           '${pastDate.year}-${pastDate.month.toString().padLeft(2, '0')}-${pastDate.day.toString().padLeft(2, '0')}';
       if (HiveService.getDailyTotal(pastKey) == null) {
-        final pastApps = await UsageStatsService.getUsageForDate(pastDate, salary);
+        final pastApps = await UsageStatsService.getUsageForDate(pastDate);
         final cost = pastApps.fold(0.0, (s, a) => s + a.moneyCost);
         final mins = pastApps.fold(0, (s, a) => s + a.durationMinutes);
         HiveService.saveAppUsageForDate(pastKey, pastApps);
@@ -387,6 +386,25 @@ class _DashboardTab extends StatelessWidget {
                                       ),
                                     );
                                   },
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.access_time_rounded, size: 14, color: Color(0xFF8A8A8A)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      MoneyCalculator.formatDuration(totalMinutes),
+                                      style: textTheme.bodySmall?.copyWith(color: const Color(0xFF8A8A8A)),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    const Icon(Icons.account_balance_wallet_rounded, size: 14, color: Color(0xFF8A8A8A)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Budget: ₹${HiveService.dailyBudget.toInt()}",
+                                      style: textTheme.bodySmall?.copyWith(color: const Color(0xFF8A8A8A)),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 24),
                                 TimeValueJar(

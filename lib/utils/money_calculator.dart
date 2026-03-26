@@ -1,12 +1,7 @@
 class MoneyCalculator {
   static const String rupeeSymbol = '\u20B9';
 
-  static double hourlyRate(double monthlySalary) => monthlySalary / 160;
-
-  static double minuteRate(double monthlySalary) => hourlyRate(monthlySalary) / 60;
-
-  static double moneyCost(int minutes, double monthlySalary) =>
-      (minutes * minuteRate(monthlySalary)).roundToDouble();
+  static double moneyCost(int minutes) => minutes.toDouble();
 
   static String formatRupees(double amount) => '$rupeeSymbol${amount.toInt()}';
 

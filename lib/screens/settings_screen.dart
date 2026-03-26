@@ -3,6 +3,7 @@ import '../services/hive_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/money_calculator.dart';
+import 'tracked_apps_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool embedded;
@@ -13,17 +14,17 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _salaryController;
+  late TextEditingController _budgetController;
   late bool _notificationsEnabled;
   late TimeOfDay _notifTime;
 
   @override
   void initState() {
     super.initState();
-    _salaryController = TextEditingController(
-      text: HiveService.monthlySalary > 0
-          ? HiveService.monthlySalary.toStringAsFixed(0)
-          : '',
+    _budgetController = TextEditingController(
+      text: HiveService.dailyBudget > 0
+          ? HiveService.dailyBudget.toStringAsFixed(0)
+          : '150',
     );
     _notificationsEnabled = HiveService.notificationsEnabled;
     _notifTime = TimeOfDay(
@@ -34,16 +35,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _salaryController.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
-  void _saveSalary() {
-    final val = double.tryParse(_salaryController.text.trim());
+  void _saveBudget() {
+    final val = double.tryParse(_budgetController.text.trim());
     if (val != null && val > 0) {
-      HiveService.monthlySalary = val;
+      HiveService.dailyBudget = val;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Salary updated')),
+        const SnackBar(content: Text('Budget updated')),
       );
     }
   }
@@ -63,8 +64,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final salary = double.tryParse(_salaryController.text) ?? 0;
-    final hourly = salary > 0 ? MoneyCalculator.hourlyRate(salary) : 0.0;
+    final budget = double.tryParse(_budgetController.text) ?? 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -74,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(16, widget.embedded ? 16 : 0, 16, 16),
           children: [
-          _sectionHeader('Salary', textTheme),
+          _sectionHeader('Rules', textTheme),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -85,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
-                  controller: _salaryController,
+                  controller: _budgetController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   style: textTheme.bodyLarge?.copyWith(
@@ -93,30 +93,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   decoration: InputDecoration(
                     labelText:
-                        'Monthly Salary (${MoneyCalculator.rupeeSymbol})',
+                        'Daily Budget Quota (${MoneyCalculator.rupeeSymbol})',
                     prefixText: '${MoneyCalculator.rupeeSymbol}  ',
                   ),
                   onChanged: (v) => setState(() {}),
-                  onSubmitted: (_) => _saveSalary(),
+                  onSubmitted: (_) => _saveBudget(),
                 ),
-                if (hourly > 0) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Your time is worth ${MoneyCalculator.formatRupees(hourly)} per hour',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: AppColors.primary,
-                    ),
+                const SizedBox(height: 10),
+                Text(
+                  '1 minute spent = 1 point drained.',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.primary,
                   ),
-                ],
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _saveSalary,
-                    child: const Text('Save Salary'),
+                    onPressed: _saveBudget,
+                    child: const Text('Save Budget'),
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _sectionHeader('Rules', textTheme),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.ads_click, color: AppColors.danger),
+              title: Text('Apps to Limit', style: textTheme.bodyMedium),
+              subtitle: Text(
+                'Select exactly which addicting apps drain your Jar',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TrackedAppsScreen()),
+                );
+              },
             ),
           ),
           const SizedBox(height: 24),
@@ -162,7 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          _sectionHeader('About', textTheme),
+          _sectionHeader('About ScrollToll', textTheme),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -173,24 +194,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _faqTile(
-                  'How is this calculated?',
-                  'We take your monthly salary, divide by 160 working hours to get your hourly rate, then multiply by time spent on each app.',
+                  'What is the Time Value Jar?',
+                  'The premium jar on your home screen visualizes your daily budget. It starts completely full each day and aggressively drains dynamically based on the exact money value you waste on non-productive apps.',
                   textTheme,
                 ),
                 const Divider(color: AppColors.divider),
+                _faqTile(
+                  'How is the toll calculated?',
+                  'Each minute you spend inside your specifically "Tracked Apps" instantly subtracts exactly 1 point from your daily Budget Quota.',
+                  textTheme,
+                ),
+                const Divider(color: AppColors.divider),
+                _faqTile(
+                  'Why are some apps zero cost?',
+                  'Unless you explicitly add an app to your "Apps to Limit" list above, the app ignores it. Read books or use Maps without penalty!',
+                  textTheme,
+                ),
+                const Divider(color: AppColors.divider),
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Version',
+                      'App Version',
                       style: textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
                     Text(
-                      '1.0.0',
+                      '1.0.0 (Launch Edition)',
                       style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],

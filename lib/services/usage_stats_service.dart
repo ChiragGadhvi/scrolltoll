@@ -4,6 +4,7 @@ import '../models/app_usage_model.dart';
 import '../utils/money_calculator.dart';
 
 import 'package:device_apps/device_apps.dart';
+import 'hive_service.dart';
 
 // System/launcher packages to exclude from the list
 const _excludedPackages = {
@@ -58,21 +59,21 @@ class UsageStatsService {
     await UsageStats.grantUsagePermission();
   }
 
-  static Future<List<AppUsageModel>> getTodayUsage(double monthlySalary) async {
+  static Future<List<AppUsageModel>> getTodayUsage() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    return _getUsageBetween(startOfDay, now, monthlySalary);
+    return _getUsageBetween(startOfDay, now);
   }
 
   static Future<List<AppUsageModel>> getUsageForDate(
-      DateTime date, double monthlySalary) async {
+      DateTime date) async {
     final start = DateTime(date.year, date.month, date.day);
     final end = start.add(const Duration(days: 1));
-    return _getUsageBetween(start, end, monthlySalary);
+    return _getUsageBetween(start, end);
   }
 
   static Future<List<AppUsageModel>> _getUsageBetween(
-      DateTime start, DateTime end, double monthlySalary) async {
+      DateTime start, DateTime end) async {
     try {
       final stats = await UsageStats.queryUsageStats(start, end);
       
@@ -94,13 +95,16 @@ class UsageStatsService {
         // Exclude completely hidden background processes (those without generic launch intents)
         if (!validLaunchableApps.contains(pkg)) continue;
 
+        // Skip apps unless explicitly tracked by the user
+        if (!HiveService.trackedApps.contains(pkg)) continue;
+
         final totalMs = int.tryParse(stat.totalTimeInForeground ?? '0') ?? 0;
         final minutes = (totalMs / 60000).round();
         if (minutes < 1) continue;
 
         // Use the OS actual app name for correctness, fallback if needed
         final appName = realAppNames[pkg] ?? _prettyName(pkg);
-        final cost = MoneyCalculator.moneyCost(minutes, monthlySalary);
+        final cost = MoneyCalculator.moneyCost(minutes);
 
         result.add(AppUsageModel(
           appName: appName,
@@ -111,6 +115,53 @@ class UsageStatsService {
       }
 
       result.sort((a, b) => b.moneyCost.compareTo(a.moneyCost));
+      return result;
+    } on PlatformException {
+      return [];
+    }
+  }
+
+  static Future<List<AppUsageModel>> getRawUsageForOnboarding() async {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 7));
+    try {
+      final stats = await UsageStats.queryUsageStats(start, now);
+      
+      final installedApps = await DeviceApps.getInstalledApplications(
+        includeSystemApps: false,
+        onlyAppsWithLaunchIntent: true,
+        includeAppIcons: false,
+      );
+      final validLaunchableApps = {for (var app in installedApps) app.packageName};
+      final realAppNames = {for (var app in installedApps) app.packageName: app.appName};
+
+      final Map<String, int> totalMinutesPerPkg = {};
+
+      for (final stat in stats) {
+        final pkg = stat.packageName ?? '';
+        if (_excludedPackages.contains(pkg)) continue;
+        if (pkg.isEmpty) continue;
+        if (!validLaunchableApps.contains(pkg)) continue;
+
+        final totalMs = int.tryParse(stat.totalTimeInForeground ?? '0') ?? 0;
+        final minutes = (totalMs / 60000).round();
+        if (minutes < 1) continue;
+
+        totalMinutesPerPkg[pkg] = (totalMinutesPerPkg[pkg] ?? 0) + minutes;
+      }
+
+      final result = <AppUsageModel>[];
+      totalMinutesPerPkg.forEach((pkg, minutes) {
+        final appName = realAppNames[pkg] ?? _prettyName(pkg);
+        result.add(AppUsageModel(
+          appName: appName,
+          packageName: pkg,
+          durationMinutes: minutes,
+          moneyCost: MoneyCalculator.moneyCost(minutes),
+        ));
+      });
+
+      result.sort((a, b) => b.durationMinutes.compareTo(a.durationMinutes));
       return result;
     } on PlatformException {
       return [];
