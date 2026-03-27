@@ -1,4 +1,4 @@
-package com.example.scrolltoll
+package com.chirag.scrolltoll
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider

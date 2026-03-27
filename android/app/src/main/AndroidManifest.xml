@@ -31,7 +31,7 @@
         </activity>
 
         <!-- Home Widget Provider -->
-        <receiver android:name="com.example.scrolltoll.ScrollTollWidgetProvider"
+        <receiver android:name="com.chirag.scrolltoll.ScrollTollWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
