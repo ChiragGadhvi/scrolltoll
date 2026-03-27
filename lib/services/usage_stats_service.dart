@@ -85,7 +85,7 @@ class UsageStatsService {
       final validLaunchableApps = {for (var app in installedApps) app.packageName};
       final realAppNames = {for (var app in installedApps) app.packageName: app.appName};
 
-      final result = <AppUsageModel>[];
+      final Map<String, int> totalMinutesPerPkg = {};
 
       for (final stat in stats) {
         final pkg = stat.packageName ?? '';
@@ -102,17 +102,19 @@ class UsageStatsService {
         final minutes = (totalMs / 60000).round();
         if (minutes < 1) continue;
 
-        // Use the OS actual app name for correctness, fallback if needed
-        final appName = realAppNames[pkg] ?? _prettyName(pkg);
-        final cost = MoneyCalculator.moneyCost(minutes);
+        totalMinutesPerPkg[pkg] = (totalMinutesPerPkg[pkg] ?? 0) + minutes;
+      }
 
+      final result = <AppUsageModel>[];
+      totalMinutesPerPkg.forEach((pkg, minutes) {
+        final appName = realAppNames[pkg] ?? _prettyName(pkg);
         result.add(AppUsageModel(
           appName: appName,
           packageName: pkg,
           durationMinutes: minutes,
-          moneyCost: cost,
+          moneyCost: MoneyCalculator.moneyCost(minutes),
         ));
-      }
+      });
 
       result.sort((a, b) => b.moneyCost.compareTo(a.moneyCost));
       return result;

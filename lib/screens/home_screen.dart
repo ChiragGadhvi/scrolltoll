@@ -12,7 +12,7 @@ import '../utils/money_calculator.dart';
 import '../widgets/app_usage_tile.dart';
 import '../widgets/today_summary_card.dart';
 import 'settings_screen.dart';
-import 'weekly_report_screen.dart';
+import 'analytics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,12 +26,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<AppUsageModel> _apps = [];
   bool _loading = true;
   bool _permissionMissing = false;
-
+  String _lastLoadedDate = '';
+  late final Stream<int> _clockStream;
+  
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _lastLoadedDate = HiveService.todayKey;
     _loadData();
+    _startMidnightChecker();
+  }
+
+  void _startMidnightChecker() {
+    // Check every minute if the day has changed
+    Stream.periodic(const Duration(minutes: 1)).listen((_) {
+      final now = HiveService.todayKey;
+      if (now != _lastLoadedDate) {
+        _loadData();
+      }
+    });
   }
 
   @override
@@ -42,10 +56,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _loadData();
+    if (state == AppLifecycleState.resumed) {
+      final now = HiveService.todayKey;
+      if (now != _lastLoadedDate) {
+        // Date changed while app was in background
+        _loadData();
+      } else {
+        // Just refresh the data for today
+        _loadData();
+      }
+    }
   }
 
   Future<void> _loadData() async {
+    _lastLoadedDate = HiveService.todayKey;
     setState(() => _loading = true);
 
     final hasPermission = await UsageStatsService.checkPermission();
@@ -156,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onRefresh: _loadData,
               onWeeklyTap: () => setState(() => _selectedIndex = 1),
             ),
-            WeeklyReportScreen(embedded: true),
+            AnalyticsScreen(embedded: true),
             SettingsScreen(embedded: true),
           ],
         ),
@@ -208,7 +232,7 @@ class _BottomNavBar extends StatelessWidget {
               ),
               _NavItem(
                 icon: Icons.bar_chart_rounded,
-                label: 'Weekly',
+                label: 'Analytics',
                 selected: selectedIndex == 1,
                 onTap: () => onTap(1),
               ),
