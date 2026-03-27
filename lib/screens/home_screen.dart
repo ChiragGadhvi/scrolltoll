@@ -433,7 +433,7 @@ class _DashboardTab extends StatelessWidget {
                                 const SizedBox(height: 24),
                                 TimeValueJar(
                                   percentageRemaining: (1.0 - (totalMoney / HiveService.dailyBudget)).clamp(0.0, 1.0),
-                                  size: 200,
+                                  size: 240,
                                 ),
                                 const SizedBox(height: 24),
                                 AnimatedSwitcher(
