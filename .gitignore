@@ -43,3 +43,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle's own build output — separate from Flutter's top-level /build/ above.
+# A stray file from here (android/build/reports/problems/problems-report.html)
+# was committed accidentally in the very first commit and stayed tracked ever
+# since; this stops it happening again.
+/android/.gradle/
+/android/app/build/
+/android/build/
+
+# Local secrets (Kie.ai key etc.) - never commit
+.env.local
+
+# Local MCP config holds a live API key - never commit
+.mcp.json

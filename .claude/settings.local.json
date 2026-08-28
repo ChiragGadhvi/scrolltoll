@@ -2,7 +2,28 @@
   "permissions": {
     "allow": [
       "Bash(find /e/scrolltoll -type d -not -path */build/* -not -path */.dart_tool/* -not -path */.gradle/* -not -path */.idea/* -not -path */.kotlin/*)",
-      "Bash(flutter pub:*)"
+      "Bash(flutter pub:*)",
+      "mcp__kie-ai__list_models",
+      "mcp__kie-ai__submit_media_generation",
+      "mcp__kie-ai__prepare_media_generation",
+      "mcp__kie-ai__get_task_status",
+      "mcp__kie-ai__wait_for_task",
+      "Bash(mkdir *)",
+      "Bash(curl -sL \"https://tempfile.aiquickdraw.com/images/chatgpt/file_00000000aa60822fa4d4437036863e24.png\" -o design/generated/rotto_confirmation_v1.png)",
+      "Bash(cd *)",
+      "Bash(curl -sL \"https://tempfile.aiquickdraw.com/images/chatgpt/file_00000000e00081f5852e4a5f2b7d4949.png\" -o design/generated/rotto_icon_face_v1.png)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(python *)",
+      "Bash(flutter --version)",
+      "Bash(dart run *)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)",
+      "Bash(flutter build *)",
+      "Bash(./gradlew --stop)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "kie-ai"
+  ]
 }

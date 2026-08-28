@@ -1,0 +1,18 @@
+# Copy to `android/key.properties` and fill in real values.
+#
+# That file is gitignored (see android/.gitignore) and must never be committed —
+# it holds your signing passwords. This .example is the tracked template.
+#
+# build.gradle.kts reads it at configure time. If it is absent, the release
+# buildType silently falls back to the DEBUG signing config, which produces an
+# AAB that Play rejects with "You uploaded an APK/AAB signed in debug mode".
+#
+# storeFile is resolved by file() inside the :app module, so it is relative to
+# `android/app/` — NOT `android/`. A keystore sitting at android/my.jks is
+# therefore `../my.jks`. An absolute path also works, and is the safer choice if
+# you keep the keystore outside the repo entirely.
+
+storePassword=CHANGEME
+keyPassword=CHANGEME
+keyAlias=upload
+storeFile=../upload-keystore.jks

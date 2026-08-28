@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home widget -->
+    <string name="widget_remaining_placeholder">–</string>
+    <string name="widget_character_description">Rotto\'s mood for today</string>
+    <string name="widget_description">Your Rotto score for today, with Rotto\'s mood.</string>
+</resources>

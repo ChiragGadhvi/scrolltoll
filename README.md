@@ -1,63 +1,102 @@
-# 🕰️ ScrollToll - The Anti-Scrolling Tracker
+# Rotto
 
-**Turn your wasted time into a visible cost. Stop mindlessly scrolling and start saving your day.**
+**A screen-time score with a face.** Rotto starts your day at 100 and drains
+as you spend time in the apps you choose to track — and his mood follows
+along. Higher is better; he never blocks or closes anything, he just reacts.
 
----
+<p align="center">
+  <img src="assets/rotto_energetic.png" alt="Energetic" width="110">
+  <img src="assets/rotto_scrolling.png" alt="Scrolling" width="110">
+  <img src="assets/rotto_tired.png" alt="Tired" width="110">
+  <img src="assets/rotto_bingemode.png" alt="Binge Mode" width="110">
+  <img src="assets/rotto_noenergy.png" alt="No Energy" width="110">
+</p>
+<p align="center"><em>Energetic → Scrolling → Tired → Binge Mode → No Energy</em></p>
 
-## 📝 Play Store Listing Details
+## What it does
 
-### 🏷️ Top Details
-- **App Title:** ScrollToll: Stop Mindless Scrolling
-- **Short Description:** Your time is money. Track exactly how much you're wasting today. 💸
-- **Category:** Productivity / Health & Fitness
-- **Target Audience:** Everyone (PEGI 3 / ESRB Everyone)
+Rotto reads Android's `UsageStatsManager` for the apps you pick, adds up
+today's foreground time, and turns that into a 0–100 score plus one of five
+moods. That's the whole idea — no accounts, no backend, no ads, nothing
+leaves the phone.
 
----
+- **The Rotto score** — 100 down to 0, draining as tracked time climbs
+- **Five moods** — Energetic, Scrolling, Tired, Binge Mode, No Energy, each
+  with its own pose
+- **Track any app** — not a fixed list; anything installed can be added
+- **Per-app detail** — tap an app for its own 7-day history and session habits
+- **Insights** — today / week / month views: a coin chart, a calendar, totals
+  and trends against the period before
+- **Home screen widget** — the score and Rotto's mood, one glance away
+- **Daily report + mood-change notifications** — optional, local-only
+- **100% offline** — real foreground time, nothing estimated or inferred
 
-### 📖 Full Description
-**Did you know you waste hours every day just... scrolling?**
+## Score bands
 
-ScrollToll is the app that treats your screen time like your bank account. Every minute you spend on addictive social media apps is "toll" deducted from your daily savings jar. When the jar hits zero, your day's value is gone!
+| Score | Mood | Screen time from |
+|---|---|---|
+| 100–80 | Energetic | 0m |
+| 79–60 | Scrolling | 50m |
+| 59–40 | Tired | 1h 38m |
+| 39–20 | Binge Mode | 2h 26m |
+| 19–0 | No Energy | 3h 14m |
 
-**Why Use ScrollToll?**
-Unlike boring screen time trackers, ScrollToll uses a unique **"Time ↔ Money"** logic (1:1 pts) to make you feel the weight of every wasted minute. It's built to be simple, fun, and highly visual.
+The score reaches 0 at 4 hours. That single number
+(`drainedAtMinutes` in [`lib/utils/rotto_score.dart`](lib/utils/rotto_score.dart))
+fixes every band above — the minute figures are derived from it, not
+hand-tuned per row, and [`test/rotto_score_test.dart`](test/rotto_score_test.dart)
+pins them so a change to the knob can't drift the app's own copy quietly out
+of sync with what it tells the user.
 
-**Key Features:**
-- 🏺 **The Savings Jar:** Watch your digital value drain in real-time. A visual jar that changes from full and glowing to empty and cracked as you scroll.
-- 📱 **Track Specific Apps:** You choose only the time-wasting apps you want to limit (Instagram, TikTok, YouTube). 
-- 📊 **Beautiful Analytics:** Switch between Daily and Weekly views. See exactly how many points you saved each day over the last week.
-- 🏺 **Daywise History:** View your progress across the week with specialized jars for every single day.
-- 🏠 **Home Screen Widget:** Keep your jar on your home screen for constant accountability.
-- 🔒 **Privacy First:** 100% Offline. We don't collect data, sell usage info, or even use the internet for tracking. Everything happens on your device.
+## Getting started
 
-**Take back your day. Download ScrollToll and start saving time today.**
+```bash
+flutter pub get                          # install dependencies
+flutter run                              # run on a connected device/emulator
+flutter analyze                          # lint
+dart format lib/ test/                   # format
+flutter test                             # run the test suite
+flutter build appbundle --release        # release bundle for Play Store
+```
 
----
+Needs a device or emulator with Google Play services for `usage_stats` and
+`device_apps` to work — Usage Access has to be granted from the system
+settings the app links to on first run.
 
-### 🎨 Visual Assets Checklist
-1. **App Icon:** (Already generated and applied).
-2. **Feature Graphic:** 1024 x 500 image showing the Savings Jar.
-3. **Screenshots:**
-   - **Home Screen:** Showing the "Time Value Jar" in its full, glowing state.
-   - **Analytics Screen:** Showing the "Daywise Savings" history with mini jars.
-   - **App Selection:** Showing the simple list of apps being tracked.
-   - **The "Addiction" View:** Showing an empty/cracked jar when the budget is exceeded.
+## Project layout
 
----
+```
+lib/
+  screens/     onboarding, home (owns the 3-tab shell), insights, app
+               detail, settings, tracked-apps picker
+  widgets/     shared UI (ui_kit.dart), the coin chart + month calendar,
+               the day-detail popup, tracked-app tiles
+  services/    Hive storage, Android usage-stats reading, notifications
+  models/      Hive-typed daily stats + plain per-app usage stats
+  utils/       the Rotto score model, mood presentation, format helpers
+android/       native widget provider, live-bubble overlay service
+```
 
-### 🛠️ Technical Details for Upload
-- **Package Name:** `com.chirag.scrolltoll`
-- **Minimum SDK:** API 23 (Android 6.0)
-- **Target SDK:** API 35 (Android 15)
-- **Version:** 1.0.0+1
-- **Permission required:** `PACKAGE_USAGE_STATS` (Device Usage Access)
+See [`CLAUDE.md`](CLAUDE.md) for the full architecture — the usage-reading
+approach and why it matters, the Hive schema and its migration history, the
+widget/notification native side, and the design system. See
+[`AGENTS.md`](AGENTS.md) for contribution conventions.
 
-### 📂 How to build the .aab
-To generate the final app bundle for upload:
-1. Open terminal in the project root.
-2. Run: `flutter build appbundle --release`
-3. The file will be at: `build/app/outputs/bundle/release/app-release.aab`
+## Built with
 
----
+Flutter · [`hive`](https://pub.dev/packages/hive) (local storage) ·
+[`usage_stats`](https://pub.dev/packages/usage_stats) (Android screen time) ·
+[`device_apps`](https://pub.dev/packages/device_apps) (installed-app list +
+icons) · [`flutter_local_notifications`](https://pub.dev/packages/flutter_local_notifications) ·
+[`home_widget`](https://pub.dev/packages/home_widget) ·
+[`flutter_animate`](https://pub.dev/packages/flutter_animate)
 
-*Note: For the final Play Store upload, you MUST sign the app bundle with your own developer JKS key in Android Studio.*
+## Privacy
+
+Everything runs on-device. No account, no analytics, no ads, no server —
+see [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) for the full policy.
+
+## Play Store listing
+
+Draft copy, screenshots and upload assets for the store listing live in
+[`store/`](store/play_listing.md).

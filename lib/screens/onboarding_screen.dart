@@ -1,15 +1,24 @@
+import 'dart:typed_data';
+
+import 'package:device_apps/device_apps.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'dart:typed_data';
-import 'package:device_apps/device_apps.dart';
+
 import '../services/hive_service.dart';
-import '../services/usage_stats_service.dart';
 import '../services/notification_service.dart';
+import '../services/usage_stats_service.dart';
 import '../theme/app_theme.dart';
-import '../utils/money_calculator.dart';
-import '../models/app_usage_model.dart';
+import '../utils/app_registry.dart';
+import '../utils/format_utils.dart';
+import '../widgets/ui_kit.dart';
 import 'home_screen.dart';
 
+/// First-run flow: meet the character, explain Usage Access, then choose
+/// which apps count.
+///
+/// The app picker works whether or not Usage Access was granted — skipping the
+/// permission only means the list is sorted alphabetically instead of by
+/// recent usage.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -17,16 +26,16 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBindingObserver {
-  final _controller = TextEditingController();
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with WidgetsBindingObserver {
   final PageController _pageController = PageController();
-  double _budget = 0;
+
   bool _isRequesting = false;
-  
-  List<AppUsageModel> _topApps = [];
-  Map<String, Uint8List?> _appIcons = {};
-  Set<String> _selectedApps = {};
   bool _isLoadingApps = false;
+  bool _appsLoaded = false;
+
+  List<_CandidateApp> _candidates = [];
+  final Set<String> _selectedApps = {};
 
   @override
   void initState() {
@@ -37,490 +46,368 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) async {
-    if (state == AppLifecycleState.resumed && _isRequesting) {
-      final hasPermission = await UsageStatsService.checkPermission();
-      if (hasPermission) {
-        _moveToAppSelection();
-      } else {
-        setState(() => _isRequesting = false);
-      }
-    }
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !_isRequesting) return;
+    // Returning from the system Usage Access screen.
+    UsageStatsService.checkPermission().then((granted) {
+      if (!mounted) return;
+      setState(() => _isRequesting = false);
+      if (granted) _moveToAppSelection();
+    });
   }
 
-  void _onNext() {
-    final value = double.tryParse(_controller.text.trim());
-    if (value == null || value <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please enter a valid budget limit'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  void _nextPage() {
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  Future<void> _requestUsageAccess() async {
+    await NotificationService.requestPermission();
+    if (!mounted) return;
+
+    setState(() => _isRequesting = true);
+    if (await UsageStatsService.checkPermission()) {
+      if (!mounted) return;
+      setState(() => _isRequesting = false);
+      _moveToAppSelection();
       return;
     }
-    HiveService.dailyBudget = value;
-    FocusScope.of(context).unfocus();
-    setState(() => _budget = value);
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.fastOutSlowIn,
-    );
+    // Sends the user to system settings; didChangeAppLifecycleState picks the
+    // flow back up when they return.
+    await UsageStatsService.requestPermission();
   }
 
-  Future<void> _checkPermissionAndProceed() async {
-    await NotificationService.requestPermission();
-    
-    setState(() => _isRequesting = true);
-    final hasPermission = await UsageStatsService.checkPermission();
-    if (hasPermission) {
-      _moveToAppSelection();
-    } else {
-      await UsageStatsService.requestPermission();
-    }
+  /// Advances to the app picker and loads its list.
+  ///
+  /// Guarded against a double load: the lifecycle observer and the "maybe
+  /// later" button can both land here if the user grants access and returns
+  /// quickly.
+  void _moveToAppSelection() {
+    _nextPage();
+    if (_appsLoaded || _isLoadingApps) return;
+    _loadCandidateApps();
   }
 
-  void _moveToAppSelection() async {
-    setState(() {
-      _isRequesting = false;
-      _isLoadingApps = true;
+  Future<void> _loadCandidateApps() async {
+    setState(() => _isLoadingApps = true);
+
+    // Filtered through the same set as TrackedAppsScreen. Without this the
+    // picker offered the launcher, System UI and the keyboard as trackable —
+    // and usage_stats_service then refuses to ever count them, so anything
+    // selected here would sit at zero forever with no explanation.
+    final installed = (await DeviceApps.getInstalledApplications(
+      includeSystemApps: true,
+      onlyAppsWithLaunchIntent: true,
+      includeAppIcons: true,
+    )).where((a) => !excludedPackages.contains(a.packageName)).toList();
+
+    // Recent usage is only available once Usage Access is granted; without it
+    // this is an empty map and the list simply falls back to alphabetical.
+    final rawUsage = await UsageStatsService.getRawUsageForOnboarding();
+    final minutesByPkg = {for (final a in rawUsage) a.packageName: a.minutes};
+
+    final candidates = installed
+        .map(
+          (app) => _CandidateApp(
+            packageName: app.packageName,
+            displayName: app.appName,
+            icon: app is ApplicationWithIcon ? app.icon : null,
+            recentMinutes: minutesByPkg[app.packageName] ?? 0,
+            isSuggested: AppRegistry.isShortVideoApp(app.packageName),
+          ),
+        )
+        .toList();
+
+    // Rotto's known short-video apps first, then whatever the phone
+    // actually used this week, then everything else by name.
+    candidates.sort((a, b) {
+      if (a.isSuggested != b.isSuggested) return a.isSuggested ? -1 : 1;
+      if (a.recentMinutes != b.recentMinutes) {
+        return b.recentMinutes.compareTo(a.recentMinutes);
+      }
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
     });
-    
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.fastOutSlowIn,
-    );
 
-    final apps = await UsageStatsService.getRawUsageForOnboarding();
-    final topApps = apps.take(15).toList();
-    
-    final icons = <String, Uint8List?>{};
-    final selected = <String>{};
-    for (var i = 0; i < topApps.length; i++) {
-       final app = topApps[i];
-       // Pre-select top 5 automatically
-       if (i < 5) selected.add(app.packageName);
-       try {
-         final dApp = await DeviceApps.getApp(app.packageName, true);
-         if (dApp is ApplicationWithIcon) {
-           icons[app.packageName] = dApp.icon;
-         }
-       } catch (_) {}
-    }
-
-    if (mounted) {
-      setState(() {
-        _topApps = topApps;
-        _appIcons = icons;
-        _selectedApps = selected;
-        _isLoadingApps = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _candidates = candidates;
+      // Preselect only the short-video apps Rotto already knows, so the
+      // default is never "every app on the phone".
+      _selectedApps
+        ..clear()
+        ..addAll(
+          candidates.where((c) => c.isSuggested).map((c) => c.packageName),
+        );
+      _isLoadingApps = false;
+      _appsLoaded = true;
+    });
   }
 
   void _finishOnboarding() {
+    HiveService.trackedApps = _selectedApps.toList();
     HiveService.onboardingDone = true;
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 600),
-          pageBuilder: (_, __, ___) => const HomeScreen(),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(
-            opacity: anim,
-            child: child,
-          ),
-        ),
-      );
-    }
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (_, _, _) => const HomeScreen(),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Sleek premium true black
+      backgroundColor: AppColors.background,
       body: PageView(
         controller: _pageController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          _buildWelcomePage(),
-          _buildBudgetPage(),
+          _buildMeetRottoPage(),
           _buildPermissionPage(),
-          _buildTopAppsSelectionPage(),
+          _buildAppSelectionPage(),
         ],
       ),
     );
   }
 
-  Widget _buildWelcomePage() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Spacer(),
-            const Text(
-              "TIME\nIS\nMONEY.",
-              textAlign: TextAlign.left,
+  // 1. Meet Rotto
+  Widget _buildMeetRottoPage() {
+    // Sized against the screen rather than fixed: a fixed 300 pushed the "Say
+    // hello" button below the fold on shorter devices, which is the one thing
+    // a welcome screen cannot afford.
+    final heroHeight = (MediaQuery.sizeOf(context).height * 0.34).clamp(
+      170.0,
+      300.0,
+    );
+
+    return _CenteredPage(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Stands on the same purple hill as Home's hero, so the first screen
+        // and the app proper look like one place. Idle bob included, because a
+        // static mascot on the welcome screen reads as a picture, not a pet.
+        SizedBox(
+              height: heroHeight,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  Container(
+                    height: heroHeight * 0.56,
+                    decoration: BoxDecoration(
+                      color: AppColors.hill,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(150),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: heroHeight * 0.07),
+                    child:
+                        Image.asset(
+                              'assets/rotto_base.png',
+                              height: heroHeight * 0.89,
+                              filterQuality: FilterQuality.high,
+                            )
+                            .animate(onPlay: (c) => c.repeat(reverse: true))
+                            .moveY(
+                              end: -9,
+                              duration: 1900.ms,
+                              curve: Curves.easeInOut,
+                            ),
+                  ),
+                ],
+              ),
+            )
+            .animate()
+            .fadeIn(duration: 650.ms)
+            .scale(begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
+        const SizedBox(height: 26),
+        Text(
+              'MEET\nROTTO.',
               style: TextStyle(
-                fontSize: 72,
+                fontSize: 52,
                 fontWeight: FontWeight.w900,
                 height: 0.95,
                 letterSpacing: -2,
-                color: Colors.white,
+                color: AppColors.textPrimary,
               ),
-            ).animate().fadeIn(duration: 800.ms).slideX(begin: -0.1, curve: Curves.easeOutQuart),
-            const SizedBox(height: 24),
-            const Text(
-              "ScrollToll tracks exactly how much value you're throwing away every day through mindless screen time.",
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: Colors.white70,
-                height: 1.4,
-              ),
-            ).animate().fadeIn(delay: 500.ms, duration: 600.ms).slideY(begin: 0.2),
-            const Spacer(flex: 2),
-            SizedBox(
-              height: 60,
-              child: ElevatedButton(
-                onPressed: () {
-                  _pageController.nextPage(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.fastOutSlowIn,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  "Get Started",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ).animate().fadeIn(delay: 900.ms),
-          ],
-        ),
-      ),
+            )
+            .animate()
+            .fadeIn(duration: 800.ms)
+            .slideX(begin: -0.1, curve: Curves.easeOutQuart),
+        const SizedBox(height: 18),
+        Text(
+          'A little companion that reacts to how much you scroll — and '
+          'cheers you on when you take a break.',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ).animate().fadeIn(delay: 450.ms, duration: 600.ms).slideY(begin: 0.2),
+        const SizedBox(height: 34),
+        SizedBox(
+          height: 56,
+          child: ElevatedButton(
+            onPressed: _nextPage,
+            child: const Text(
+              'Say hello',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ).animate().fadeIn(delay: 800.ms),
+      ],
     );
   }
 
-  Widget _buildBudgetPage() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          children: [
-            const Spacer(flex: 2),
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary,
-                    AppColors.primary.withOpacity(0.4),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
-                    spreadRadius: 8,
-                    blurRadius: 30,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.attach_money_rounded,
-                size: 50,
-                color: Colors.white,
-              ),
-            ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
-            const SizedBox(height: 48),
-            Text(
-              "Set your daily Time Value Budget.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    color: Colors.white,
-                  ),
-            ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
-            const SizedBox(height: 16),
-            Text(
-              "How many total points are you allowing yourself to spend daily? Each tracked minute on your phone will cost exactly 1 point from your Jar.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                    height: 1.5,
-                  ),
-            ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
-            const SizedBox(height: 48),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF333333)),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    MoneyCalculator.rupeeSymbol,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        hintText: '150',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _budget = double.tryParse(val) ?? 0;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2),
-            if (_budget > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 24),
-                child: Text(
-                  'You have exactly ${_budget.toInt()} points to burn today!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ).animate().fadeIn().moveY(begin: -10),
-              ),
-            const Spacer(flex: 3),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _onNext,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  "Continue",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ).animate().fadeIn(delay: 500.ms),
-          ],
-        ),
-      ),
-    );
-  }
-
+  // 2. Usage Access, and why the data stays put
   Widget _buildPermissionPage() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
-          children: [
-            const Spacer(flex: 2),
-            Container(
-              padding: const EdgeInsets.all(24),
+    final textTheme = Theme.of(context).textTheme;
+    return _CenteredPage(
+      children: [
+        Container(
+              height: (MediaQuery.sizeOf(context).height * 0.24).clamp(
+                140.0,
+                210.0,
+              ),
+              width: (MediaQuery.sizeOf(context).height * 0.24).clamp(
+                140.0,
+                210.0,
+              ),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.warning,
-                    AppColors.warning.withOpacity(0.4),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                color: AppColors.primarySoft,
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.22),
+                  width: 2,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.warning.withOpacity(0.2),
-                    spreadRadius: 8,
-                    blurRadius: 30,
-                  ),
-                ],
               ),
-              child: const Icon(
-                Icons.privacy_tip_rounded,
-                size: 50,
-                color: Colors.white,
-              ),
-            ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
-            const SizedBox(height: 48),
-            Text(
-              "One Final Step",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    color: Colors.white,
-                  ),
-            ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
-            const SizedBox(height: 16),
-            Text(
-              "We need permission to see your screen time.\nEverything happens locally on this device. We don't collect or send your data anywhere.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                    height: 1.5,
-                  ),
-            ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
-            const Spacer(flex: 3),
-            if (_isRequesting)
-              const CircularProgressIndicator(color: AppColors.warning)
-            else
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _checkPermissionAndProceed,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.warning,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    "Grant Permission",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              padding: const EdgeInsets.all(10),
+              child: ClipOval(
+                child: Transform.scale(
+                  scale: 1.15,
+                  child: Image.asset(
+                    'assets/rotto_face.png',
+                    filterQuality: FilterQuality.high,
                   ),
                 ),
-              ).animate().fadeIn(delay: 400.ms),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () {
-                _moveToAppSelection(); // If they stubbornly refuse they'll see an empty list
-              },
-              child: Text(
-                'Skip for now',
-                style: TextStyle(color: Colors.white.withOpacity(0.5)),
               ),
-            ).animate().fadeIn(delay: 500.ms),
-          ],
-        ),
-      ),
+            )
+            .animate()
+            .fadeIn(duration: 650.ms)
+            .scale(begin: const Offset(0.9, 0.9), curve: Curves.easeOutBack),
+        const SizedBox(height: 26),
+        Text(
+          'Stays on your phone',
+          textAlign: TextAlign.center,
+          style: textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+            color: AppColors.textPrimary,
+          ),
+        ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+        const SizedBox(height: 14),
+        Text(
+          'Android’s Usage Access lets Rotto measure how long you spend in '
+          'the apps you pick.\n\nThere is no account and no server — nothing '
+          'ever leaves this device.',
+          textAlign: TextAlign.center,
+          style: textTheme.bodyMedium?.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
+        const SizedBox(height: 30),
+        if (_isRequesting)
+          const Center(child: RottoLoader(size: 90))
+        else
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _requestUsageAccess,
+              child: const Text(
+                'Allow Usage Access',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ).animate().fadeIn(delay: 400.ms),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _moveToAppSelection,
+          child: Text(
+            'Maybe later',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ).animate().fadeIn(delay: 500.ms),
+      ],
     );
   }
 
-  Widget _buildTopAppsSelectionPage() {
+  // 3. Choose the apps that count
+  Widget _buildAppSelectionPage() {
+    final textTheme = Theme.of(context).textTheme;
     return SafeArea(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
             child: Text(
-              "Select Apps to Limit",
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
+              'What should count?',
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
             ).animate().fadeIn(delay: 100.ms).slideY(begin: -0.2),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              "Here are the apps you use most. Select the ones you want to track to drain from your Budget Quota.",
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                    height: 1.5,
-                  ),
+              'Pick any apps you want Rotto to count. Short-video apps '
+              'are suggested first, but anything on your phone works, and you '
+              'can change this later.',
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
             ).animate().fadeIn(delay: 200.ms).slideY(begin: -0.2),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: _isLoadingApps
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const Center(
+                    child: RottoLoader(message: 'Looking through your apps…'),
+                  )
+                : _candidates.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'No launchable apps were found on this device. You can '
+                        'add apps later from Settings › Apps to Track.',
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _topApps.length,
-                    itemBuilder: (context, index) {
-                      final app = _topApps[index];
-                      final isSelected = _selectedApps.contains(app.packageName);
-                      final icon = _appIcons[app.packageName];
-                      
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected 
-                              ? AppColors.danger.withOpacity(0.1) 
-                              : AppColors.card,
-                          borderRadius: BorderRadius.circular(12),
-                          border: isSelected 
-                              ? Border.all(color: AppColors.danger.withOpacity(0.5)) 
-                              : Border.all(color: Colors.transparent),
-                        ),
-                        child: SwitchListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          secondary: icon != null 
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.memory(icon, width: 40, height: 40, fit: BoxFit.cover),
-                                )
-                              : const SizedBox(width: 40, height: 40),
-                          title: Text(
-                            app.appName,
-                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: isSelected ? AppColors.danger : AppColors.textPrimary,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                            ),
-                          ),
-                          value: isSelected,
-                          activeColor: AppColors.danger,
-                          onChanged: (val) {
-                            setState(() {
-                              if (val) {
-                                _selectedApps.add(app.packageName);
-                              } else {
-                                _selectedApps.remove(app.packageName);
-                              }
-                            });
-                          },
-                        ),
-                      ).animate().fadeIn(delay: Duration(milliseconds: 300 + (index * 50)));
-                    },
+                    itemCount: _candidates.length,
+                    itemBuilder: (context, index) =>
+                        _appRow(_candidates[index], textTheme),
                   ),
           ),
           Padding(
@@ -529,26 +416,136 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () {
-                  HiveService.trackedApps = _selectedApps.toList();
-                  _finishOnboarding();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                onPressed: _finishOnboarding,
+                child: Text(
+                  _selectedApps.isEmpty
+                      ? 'Skip for now'
+                      : 'Track ${_selectedApps.length} '
+                            'app${_selectedApps.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: const Text(
-                  "Finish Setup",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
               ),
-            ).animate().fadeIn(delay: 500.ms),
+            ),
           ),
         ],
       ),
     );
   }
+
+  Widget _appRow(_CandidateApp app, TextTheme textTheme) {
+    final selected = _selectedApps.contains(app.packageName);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected
+            ? AppColors.primary.withValues(alpha: 0.10)
+            : AppColors.card,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: selected
+              ? BorderSide(color: AppColors.primary)
+              : BorderSide(color: AppColors.divider),
+        ),
+        child: SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          secondary: app.icon != null
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    app.icon!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              : const SizedBox(width: 40, height: 40),
+          title: Text(
+            app.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.bodyLarge?.copyWith(
+              color: selected ? AppColors.primary : AppColors.textPrimary,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+          subtitle: app.recentMinutes > 0
+              ? Text(
+                  '${formatDuration(app.recentMinutes)} in the last 7 days',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              : null,
+          value: selected,
+          activeThumbColor: AppColors.primary,
+          onChanged: (on) => setState(() {
+            if (on) {
+              _selectedApps.add(app.packageName);
+            } else {
+              _selectedApps.remove(app.packageName);
+            }
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single onboarding page: vertically centred when it fits, scrollable when
+/// it does not.
+///
+/// Deliberately no `Spacer`s — a flex child inside a scroll view has no bounded
+/// height to expand into. Explicit gaps keep short screens and large system
+/// font sizes from overflowing.
+class _CenteredPage extends StatelessWidget {
+  final List<Widget> children;
+  final CrossAxisAlignment crossAxisAlignment;
+
+  const _CenteredPage({
+    required this.children,
+    this.crossAxisAlignment = CrossAxisAlignment.center,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: crossAxisAlignment,
+            children: children,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One row in the onboarding app picker.
+class _CandidateApp {
+  final String packageName;
+  final String displayName;
+  final Uint8List? icon;
+  final int recentMinutes;
+
+  /// True for apps in [AppRegistry]'s short-video list, which sort first and
+  /// start preselected.
+  final bool isSuggested;
+
+  const _CandidateApp({
+    required this.packageName,
+    required this.displayName,
+    required this.icon,
+    required this.recentMinutes,
+    required this.isSuggested,
+  });
 }

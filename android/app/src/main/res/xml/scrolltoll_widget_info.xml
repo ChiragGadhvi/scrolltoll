@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  A small 2x1 rectangle. It holds one pose and one number, so it does not need
+  the 4x2 footprint it used to claim. minWidth/minHeight are the pre-API-31
+  fallbacks for the same shape (roughly two columns by one row on a standard
+  launcher grid); targetCellWidth/Height are what Android 12+ actually uses.
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="250dp"
+    android:minWidth="110dp"
     android:minHeight="40dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:description="@string/widget_description"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/scrolltoll_widget_layout"
+    android:previewLayout="@layout/scrolltoll_widget_layout"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen">
 </appwidget-provider>

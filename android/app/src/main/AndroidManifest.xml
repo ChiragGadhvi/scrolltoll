@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
+ 
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-        android:label="ScrollToll"
+        android:label="Rotto"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -31,7 +31,7 @@
         </activity>
 
         <!-- Home Widget Provider -->
-        <receiver android:name="com.chirag.scrolltoll.ScrollTollWidgetProvider"
+        <receiver android:name="com.chirag.scrolltoll.BrainfogWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -40,6 +40,7 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/scrolltoll_widget_info" />
         </receiver>
+
 
         <!-- Notification receivers -->
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"

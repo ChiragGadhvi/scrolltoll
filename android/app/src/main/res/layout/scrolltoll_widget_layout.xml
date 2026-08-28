@@ -1,44 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Rotto home widget: the pose Rotto is in today, and the score. Nothing else.
+
+  Sized for a 2x1 cell, so the text is scaled for one row rather than the two
+  the old 4x2 layout assumed. Filenames stay from the ScrollToll era on purpose;
+  widget_character/widget_remaining keep their ids so the provider's references
+  stay stable.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:background="@drawable/widget_bg"
-    android:padding="16dp"
-    android:gravity="center_vertical">
+    android:padding="8dp"
+    android:gravity="center">
 
     <ImageView
-        android:id="@+id/widget_jar_image"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:src="@drawable/jar_stage_1_full" />
+        android:id="@+id/widget_character"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:src="@drawable/rotto_energetic"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/widget_character_description" />
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/widget_remaining"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:layout_marginStart="16dp">
-
-        <TextView
-            android:id="@+id/widget_amount"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="₹0 left"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <ProgressBar
-            android:id="@+id/widget_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="3dp"
-            android:layout_marginTop="8dp"
-            android:max="100"
-            android:progress="100"
-            android:progressTint="#FF6B35"
-            android:progressBackgroundTint="#333333" />
-    </LinearLayout>
+        android:gravity="center"
+        android:text="@string/widget_remaining_placeholder"
+        android:textColor="#1B9E4B"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:includeFontPadding="false" />
 </LinearLayout>

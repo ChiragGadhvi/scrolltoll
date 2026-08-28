@@ -34,7 +34,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -57,6 +57,19 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // Untested here: this sandbox's Gradle daemon cannot connect (a
+            // Windows AF_UNIX socket limitation, unrelated to this project) so
+            // this has never gone through an actual release build. Smoke-test
+            // notifications, the home widget, tracked-app icons and usage
+            // reading on a real device before shipping a build made with this
+            // on. If anything breaks, the fix is a keep rule in
+            // proguard-rules.pro, not turning this back off.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

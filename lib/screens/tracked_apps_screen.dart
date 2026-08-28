@@ -1,7 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:flutter/material.dart';
+
 import '../services/hive_service.dart';
+import '../services/usage_stats_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ui_kit.dart';
 
 class TrackedAppsScreen extends StatefulWidget {
   const TrackedAppsScreen({super.key});
@@ -14,6 +17,7 @@ class _TrackedAppsScreenState extends State<TrackedAppsScreen> {
   List<Application> _apps = [];
   bool _loading = true;
   Set<String> _trackedSet = {};
+  String _query = '';
 
   @override
   void initState() {
@@ -23,13 +27,15 @@ class _TrackedAppsScreenState extends State<TrackedAppsScreen> {
   }
 
   Future<void> _loadApps() async {
-    final installed = await DeviceApps.getInstalledApplications(
-      includeSystemApps: false,
+    final installed = (await DeviceApps.getInstalledApplications(
+      includeSystemApps: true,
       onlyAppsWithLaunchIntent: true,
       includeAppIcons: true,
+    )).where((a) => !excludedPackages.contains(a.packageName)).toList();
+    installed.sort(
+      (a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()),
     );
-    installed.sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
-    
+
     if (mounted) {
       setState(() {
         _apps = installed;
@@ -49,100 +55,146 @@ class _TrackedAppsScreenState extends State<TrackedAppsScreen> {
     HiveService.trackedApps = _trackedSet.toList();
   }
 
+  /// Tracked apps float to the top, so the current selection is never buried
+  /// in a long alphabetical list.
+  List<Application> get _visibleApps {
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? List<Application>.of(_apps)
+        : _apps.where((a) => a.appName.toLowerCase().contains(q)).toList();
+    filtered.sort((a, b) {
+      final aTracked = _trackedSet.contains(a.packageName);
+      final bTracked = _trackedSet.contains(b.packageName);
+      if (aTracked != bTracked) return aTracked ? -1 : 1;
+      return a.appName.toLowerCase().compareTo(b.appName.toLowerCase());
+    });
+    return filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final visible = _visibleApps;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Apps to Limit'),
-        backgroundColor: AppColors.card,
+        title: const Text('Apps to Track'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Text(
+                '${_trackedSet.length} on',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
+          ? const Center(child: RottoLoader(message: 'Finding your apps…'))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    "Select the exact apps (like Instagram, TikTok) you want to track. If an app isn't selected, it won't drain your Time Value Jar.",
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Only the apps you switch on count towards your daily '
+                        'total.',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        onChanged: (v) => setState(() => _query = v),
+                        decoration: const InputDecoration(
+                          hintText: 'Search apps',
+                          prefixIcon: Icon(Icons.search_rounded, size: 20),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _apps.length,
-                    itemBuilder: (context, index) {
-                      final app = _apps[index];
-                      final isTracked = _trackedSet.contains(app.packageName);
-                      
-                      Widget iconWidget;
-                      if (app is ApplicationWithIcon) {
-                        iconWidget = ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.memory(
-                            app.icon,
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                          ),
-                        );
-                      } else {
-                        iconWidget = Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.divider,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              app.appName.isNotEmpty ? app.appName[0].toUpperCase() : '?',
-                              style: textTheme.titleMedium?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
+                  child: visible.isEmpty
+                      ? RottoEmptyState(
+                          title: 'No matches',
+                          message:
+                              'No installed app matches '
+                              '"${_query.trim()}".',
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          itemCount: visible.length,
+                          itemBuilder: (context, index) {
+                            final app = visible[index];
+                            final isTracked = _trackedSet.contains(
+                              app.packageName,
+                            );
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: isTracked 
-                              ? AppColors.danger.withOpacity(0.1) 
-                              : AppColors.card,
-                          borderRadius: BorderRadius.circular(12),
-                          border: isTracked 
-                              ? Border.all(color: AppColors.danger.withOpacity(0.5)) 
-                              : Border.all(color: Colors.transparent),
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              // Material so the row's ink splash stays
+                              // visible — see _SettingsGroup for the same
+                              // reason.
+                              child: Material(
+                                color: isTracked
+                                    ? AppColors.primarySoft
+                                    : AppColors.card,
+                                clipBehavior: Clip.antiAlias,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  side: BorderSide(
+                                    color: isTracked
+                                        ? AppColors.primary.withValues(
+                                            alpha: 0.35,
+                                          )
+                                        : AppColors.divider,
+                                  ),
+                                ),
+                                child: SwitchListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 4,
+                                  ),
+                                  secondary: AppIconAvatar(
+                                    packageName: app.packageName,
+                                    appName: app.appName,
+                                    size: 42,
+                                  ),
+                                  title: Text(
+                                    app.appName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: isTracked
+                                          ? AppColors.primaryDeep
+                                          : AppColors.textPrimary,
+                                      fontWeight: isTracked
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                  value: isTracked,
+                                  activeThumbColor: AppColors.card,
+                                  activeTrackColor: AppColors.primary,
+                                  onChanged: (val) =>
+                                      _toggleTracked(app.packageName, val),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                        child: SwitchListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          secondary: iconWidget,
-                          title: Text(
-                            app.appName,
-                            style: textTheme.bodyLarge?.copyWith(
-                              color: isTracked ? AppColors.danger : AppColors.textPrimary,
-                              fontWeight: isTracked ? FontWeight.w600 : FontWeight.w400,
-                            ),
-                          ),
-                          value: isTracked,
-                          activeColor: AppColors.danger,
-                          onChanged: (val) => _toggleTracked(app.packageName, val),
-                        ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),

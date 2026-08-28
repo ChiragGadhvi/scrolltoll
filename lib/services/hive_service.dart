@@ -1,98 +1,179 @@
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import '../models/app_usage_model.dart';
-import '../models/daily_total_model.dart';
+import '../models/app_brainfog_stats_model.dart';
+import '../models/daily_brainfog_stats_model.dart';
 
 class HiveService {
   static const _settingsBox = 'settings';
-  static const _dailyTotalsBox = 'daily_totals';
-  static const _appUsageBox = 'app_usage';
+  static const _dailyBrainfogStatsBox = 'daily_brainfog_stats';
+  static const _appBrainfogUsageBox = 'app_brainfog_usage';
+
+  /// Bumped when stored usage numbers become untrustworthy and have to be
+  /// rebuilt rather than migrated.
+  ///
+  /// v2: everything written before this used `queryUsageStats`, which sums
+  /// Android's interval buckets and so recorded wildly inflated totals — days
+  /// reading 30h were common. Those records cannot be corrected in place (the
+  /// original per-session detail was never stored), and the write-once backfill
+  /// guard means they would never be overwritten either. So they are dropped and
+  /// re-derived from event data, which is accurate for roughly the last week.
+  static const _dataVersion = 2;
 
   static Future<void> init() async {
     await Hive.initFlutter();
-    Hive.registerAdapter(AppUsageModelAdapter());
-    Hive.registerAdapter(DailyTotalModelAdapter());
+    Hive.registerAdapter(DailyBrainfogStatsAdapter());
     await Hive.openBox(_settingsBox);
-    await Hive.openBox<DailyTotalModel>(_dailyTotalsBox);
-    await Hive.openBox(_appUsageBox);
+    await Hive.openBox<DailyBrainfogStats>(_dailyBrainfogStatsBox);
+    await Hive.openBox(_appBrainfogUsageBox);
+
+    if (settings.get('data_version') != _dataVersion) {
+      await dailyBrainfogStats.clear();
+      await appBrainfogUsage.clear();
+      await settings.put('data_version', _dataVersion);
+    }
   }
 
   // Settings
   static Box get settings => Hive.box(_settingsBox);
 
-  // Removed monthlySalary logic for a simpler 1:1 minute mapping
+  /// Bumped whenever [trackedApps] is written, so screens holding cached usage
+  /// can reload. Watched by HomeScreen.
+  static final trackedAppsRevision = ValueNotifier<int>(0);
 
-  static double get dailyBudget => settings.get('daily_budget', defaultValue: 150.0) as double;
-  static set dailyBudget(double v) => settings.put('daily_budget', v);
+  /// Bumped once after a refresh has finished writing usage records.
+  ///
+  /// Insights is built inside HomeScreen's IndexedStack, so it is constructed
+  /// *before* the first async read has written anything — it used to render an
+  /// empty week and never reload, which looked like the tab was broken until
+  /// the app was restarted. Home fires this when its writes are done.
+  ///
+  /// Deliberately not fired from the save methods themselves: the backfill
+  /// writes a dozen days in a loop and would rebuild Insights on each one.
+  static final statsRevision = ValueNotifier<int>(0);
 
-  static List<String> get trackedApps => (settings.get('tracked_apps', defaultValue: <String>[]) as List).cast<String>();
-  static set trackedApps(List<String> v) => settings.put('tracked_apps', v);
+  static void notifyStatsChanged() => statsRevision.value++;
 
-  static bool get notificationsEnabled => settings.get('notifications_enabled', defaultValue: true) as bool;
-  static set notificationsEnabled(bool v) => settings.put('notifications_enabled', v);
+  static List<String> get trackedApps =>
+      (settings.get('tracked_apps', defaultValue: <String>[]) as List)
+          .cast<String>();
+  static set trackedApps(List<String> v) {
+    settings.put('tracked_apps', v);
+    trackedAppsRevision.value++;
+  }
 
-  static int get notificationHour => settings.get('notification_hour', defaultValue: 21) as int;
+  static bool get notificationsEnabled =>
+      settings.get('notifications_enabled', defaultValue: true) as bool;
+  static set notificationsEnabled(bool v) =>
+      settings.put('notifications_enabled', v);
+
+  static int get notificationHour =>
+      settings.get('notification_hour', defaultValue: 21) as int;
   static set notificationHour(int v) => settings.put('notification_hour', v);
 
-  static int get notificationMinute => settings.get('notification_minute', defaultValue: 0) as int;
-  static set notificationMinute(int v) => settings.put('notification_minute', v);
+  static int get notificationMinute =>
+      settings.get('notification_minute', defaultValue: 0) as int;
+  static set notificationMinute(int v) =>
+      settings.put('notification_minute', v);
 
-  static bool get onboardingDone => settings.get('onboarding_done', defaultValue: false) as bool;
+  /// The mood Rotto was last seen in, so a change can be announced exactly
+  /// once. Null until the first refresh, which is deliberately silent — nobody
+  /// wants a notification for "you are now Energetic" on install.
+  static String? get lastNotifiedMood =>
+      settings.get('last_notified_mood') as String?;
+  static set lastNotifiedMood(String? v) =>
+      settings.put('last_notified_mood', v);
+
+  static bool get onboardingDone =>
+      settings.get('onboarding_done', defaultValue: false) as bool;
   static set onboardingDone(bool v) => settings.put('onboarding_done', v);
 
-  // Daily totals
-  static Box<DailyTotalModel> get dailyTotals => Hive.box<DailyTotalModel>(_dailyTotalsBox);
+  // Daily brainfog stats
+  static Box<DailyBrainfogStats> get dailyBrainfogStats =>
+      Hive.box<DailyBrainfogStats>(_dailyBrainfogStatsBox);
 
-  static void saveDailyTotal(DailyTotalModel model) {
-    dailyTotals.put(model.date, model);
+  static void saveDailyBrainfogStats(DailyBrainfogStats model) {
+    dailyBrainfogStats.put(model.date, model);
     // Keep only last 30 days
-    if (dailyTotals.length > 30) {
-      final keys = dailyTotals.keys.toList()..sort();
-      dailyTotals.delete(keys.first);
+    if (dailyBrainfogStats.length > 30) {
+      final keys = dailyBrainfogStats.keys.toList()..sort();
+      dailyBrainfogStats.delete(keys.first);
     }
   }
 
-  static DailyTotalModel? getDailyTotal(String date) => dailyTotals.get(date);
+  static DailyBrainfogStats? getDailyBrainfogStats(String date) =>
+      dailyBrainfogStats.get(date);
 
-  static List<DailyTotalModel> getLast7Days() {
+  static List<DailyBrainfogStats> getLast7Days() => getLastNDays(7);
+
+  static List<DailyBrainfogStats> getPrevious7Days() =>
+      _daysEndingOffsetAgo(7, 7);
+
+  /// The last [n] days, oldest first, ending today. Days never recorded come
+  /// back as zero-minute placeholders.
+  static List<DailyBrainfogStats> getLastNDays(int n) =>
+      _daysEndingOffsetAgo(0, n);
+
+  /// Returns [count] days, oldest first, the newest being `offsetDays` ago
+  /// (0 = today).
+  static List<DailyBrainfogStats> _daysEndingOffsetAgo(
+    int offsetDays,
+    int count,
+  ) {
     final now = DateTime.now();
-    final result = <DailyTotalModel>[];
-    for (int i = 6; i >= 0; i--) {
+    final result = <DailyBrainfogStats>[];
+    for (int i = count - 1 + offsetDays; i >= offsetDays; i--) {
       final date = now.subtract(Duration(days: i));
-      final key = _dateKey(date);
-      result.add(dailyTotals.get(key) ?? DailyTotalModel(date: key, totalMoney: 0, totalMinutes: 0));
+      final key = dateKeyFor(date);
+      result.add(
+        dailyBrainfogStats.get(key) ??
+            DailyBrainfogStats(
+              date: key,
+              totalMinutes: 0,
+              brainfogScore: 0,
+              trackedPackagesSnapshot: const [],
+            ),
+      );
     }
     return result;
   }
 
   // App usage
-  static Box get appUsage => Hive.box(_appUsageBox);
+  static Box get appBrainfogUsage => Hive.box(_appBrainfogUsageBox);
 
-  static void saveAppUsageForDate(String date, List<AppUsageModel> apps) {
-    final data = apps.map((a) => {
-      'appName': a.appName,
-      'packageName': a.packageName,
-      'durationMinutes': a.durationMinutes,
-      'moneyCost': a.moneyCost,
-    }).toList();
-    appUsage.put(date, data);
+  static void saveAppBrainfogUsageForDate(
+    String date,
+    List<AppBrainfogStats> apps,
+  ) {
+    final data = apps
+        .map(
+          (a) => {
+            'appName': a.appName,
+            'packageName': a.packageName,
+            'minutes': a.minutes,
+          },
+        )
+        .toList();
+    appBrainfogUsage.put(date, data);
   }
 
-  static List<AppUsageModel> getAppUsageForDate(String date) {
-    final raw = appUsage.get(date);
+  static List<AppBrainfogStats> getAppBrainfogUsageForDate(String date) {
+    final raw = appBrainfogUsage.get(date);
     if (raw == null) return [];
     return (raw as List).map((e) {
       final m = e as Map;
-      return AppUsageModel(
+      return AppBrainfogStats(
         appName: m['appName'] as String,
         packageName: m['packageName'] as String,
-        durationMinutes: m['durationMinutes'] as int,
-        moneyCost: m['moneyCost'] as double,
+        minutes: m['minutes'] as int,
       );
     }).toList();
   }
 
-  static String _dateKey(DateTime dt) =>
+  /// The `yyyy-MM-dd` key a day is stored and looked up under. Public so
+  /// callers deriving a key for a specific [DateTime] (the backfill loop in
+  /// `home_screen.dart`) use this instead of re-deriving the same format.
+  static String dateKeyFor(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
-  static String get todayKey => _dateKey(DateTime.now());
+  static String get todayKey => dateKeyFor(DateTime.now());
 }
