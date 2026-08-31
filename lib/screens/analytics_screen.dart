@@ -493,7 +493,7 @@ class _TotalCard extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 8),
                   child: Image.asset(
                     RottoCharacter.assetFor(character!.state),
-                    height: 88,
+                    height: 106, // 88 * 1.2
                     filterQuality: FilterQuality.high,
                   ),
                 ),

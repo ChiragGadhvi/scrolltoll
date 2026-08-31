@@ -2,7 +2,7 @@ name: scrolltoll
 description: "Rotto - A friendly screen-time companion for the apps you choose"
 publish_to: 'none'
 
-version: 2.0.0+10
+version: 2.1.0+11
 
 environment:
   sdk: ^3.11.3
@@ -61,6 +61,14 @@ flutter_native_splash:
 flutter:
   uses-material-design: true
   assets:
+    - assets/rotto_energetic.webp
+    - assets/rotto_scrolling.webp
+    - assets/rotto_tired.webp
+    - assets/rotto_bingemode.webp
+    - assets/rotto_noenergy.webp
+    - assets/rotto_base.webp
+    - assets/rotto_empty.webp
+    - assets/rotto_waiting.webp
     - assets/rotto_energetic.png
     - assets/rotto_scrolling.png
     - assets/rotto_tired.png

@@ -13,41 +13,65 @@ class RottoCharacter {
   /// Everything about one mood, keyed once instead of across four parallel
   /// maps. Colour ramp reads best-to-worst in [RottoState] order, so a
   /// falling score always moves toward red.
+  ///
+  /// `animatedAsset` is a looping WebP — Flutter's `Image.asset` plays it
+  /// natively, no extra package, and it's what every in-app placement uses
+  /// (including the coin chart and month calendar, each showing several at
+  /// once). `stillAsset` is the original static PNG; nothing in `lib/` shows
+  /// it directly any more, but it still backs [drawableNameFor], since the
+  /// Android side (widget, notifications) has no concept of the animation at
+  /// all — RemoteViews cannot play animated images, full stop, regardless of
+  /// format.
   static const _moods =
-      <RottoState, ({String asset, String name, String caption, Color color})>{
+      <
+        RottoState,
+        ({
+          String animatedAsset,
+          String stillAsset,
+          String name,
+          String caption,
+          Color color,
+        })
+      >{
         RottoState.energetic: (
-          asset: 'assets/rotto_energetic.png',
+          animatedAsset: 'assets/rotto_energetic.webp',
+          stillAsset: 'assets/rotto_energetic.png',
           name: 'Energetic',
           caption: 'Rotto is bouncing off the walls.',
           color: AppColors.safe,
         ),
         RottoState.scrolling: (
-          asset: 'assets/rotto_scrolling.png',
+          animatedAsset: 'assets/rotto_scrolling.webp',
+          stillAsset: 'assets/rotto_scrolling.png',
           name: 'Scrolling',
           caption: 'Rotto is settling in for a scroll.',
           color: AppColors.safeDim,
         ),
         RottoState.tired: (
-          asset: 'assets/rotto_tired.png',
+          animatedAsset: 'assets/rotto_tired.webp',
+          stillAsset: 'assets/rotto_tired.png',
           name: 'Tired',
           caption: 'Rotto is starting to droop.',
           color: AppColors.warning,
         ),
         RottoState.bingeMode: (
-          asset: 'assets/rotto_bingemode.png',
+          animatedAsset: 'assets/rotto_bingemode.webp',
+          stillAsset: 'assets/rotto_bingemode.png',
           name: 'Binge Mode',
           caption: 'Rotto has fully committed to the feed.',
           color: AppColors.bingeOrange,
         ),
         RottoState.noEnergy: (
-          asset: 'assets/rotto_noenergy.png',
+          animatedAsset: 'assets/rotto_noenergy.webp',
+          stillAsset: 'assets/rotto_noenergy.png',
           name: 'No Energy',
           caption: 'Rotto is out of energy. Tomorrow he resets.',
           color: AppColors.danger,
         ),
       };
 
-  static String assetFor(RottoState state) => _moods[state]!.asset;
+  /// The looping animation Rotto renders as everywhere in the Flutter app.
+  static String assetFor(RottoState state) => _moods[state]!.animatedAsset;
 
   static String nameFor(RottoState state) => _moods[state]!.name;
 
@@ -55,10 +79,11 @@ class RottoCharacter {
 
   static Color colorFor(RottoState state) => _moods[state]!.color;
 
-  /// The Android drawable resource name backing [assetFor] — the same asset,
-  /// without the `assets/` prefix or extension. Used wherever a drawable name
-  /// is needed directly (notifications), so there is one mood→art mapping,
-  /// not a second copy re-deriving Android resource names.
+  /// The Android drawable resource name for the static PNG — without the
+  /// `assets/` prefix or extension. Used wherever a drawable name is needed
+  /// directly (notifications, the widget), so there is one mood→art mapping,
+  /// not a second copy re-deriving Android resource names. Always the static
+  /// PNG's name: the Android side cannot play the animated WebP at all.
   static String drawableNameFor(RottoState state) =>
-      _moods[state]!.asset.split('/').last.replaceAll('.png', '');
+      _moods[state]!.stillAsset.split('/').last.replaceAll('.png', '');
 }

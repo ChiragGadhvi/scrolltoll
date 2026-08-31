@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../models/app_brainfog_stats_model.dart';
@@ -484,7 +483,7 @@ class _RottoStage extends StatelessWidget {
               children: [
                 const SizedBox(height: 16),
                 SizedBox(
-                  height: 244,
+                  height: 317, // 244 * 1.3
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     transitionBuilder: (child, animation) => ScaleTransition(
@@ -494,22 +493,16 @@ class _RottoStage extends StatelessWidget {
                       ),
                       child: FadeTransition(opacity: animation, child: child),
                     ),
-                    child:
-                        Image.asset(
-                              RottoCharacter.assetFor(level.state),
-                              key: ValueKey(level.state),
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.high,
-                            )
-                            .animate(onPlay: (c) => c.repeat(reverse: true))
-                            // Idle bob, so Rotto looks alive between state
-                            // changes. Slower and shallower the more drained
-                            // he is, which reads as tiring out.
-                            .moveY(
-                              end: -8 + 5 * level.drainedFraction,
-                              duration: (1600 + 900 * level.drainedFraction).ms,
-                              curve: Curves.easeInOut,
-                            ),
+                    // The idle motion used to be a hand-rolled bob here; now
+                    // it's baked into the looping WebP itself, so this is
+                    // just the cross-fade between one mood's animation and
+                    // the next.
+                    child: Image.asset(
+                      RottoCharacter.assetFor(level.state),
+                      key: ValueKey(level.state),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
                 ),
                 _ScoreNumber(score: level.score),

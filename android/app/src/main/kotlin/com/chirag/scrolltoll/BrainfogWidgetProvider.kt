@@ -6,6 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
+import android.os.Build
 import android.widget.RemoteViews
 
 /**
@@ -28,27 +34,7 @@ class BrainfogWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        // Kept in sync with AppColors (lib/theme/app_theme.dart) and with
-        // RottoCharacter.colorFor (lib/utils/rotto_character.dart).
-        // NOTE: the binge rung is AppColors.bingeOrange, NOT AppColors.primary
-        // -- primary is the purple brand colour and is not on the mood ramp.
-        private const val COLOR_SAFE = 0xFF1B9E4B.toInt()
-        private const val COLOR_SAFE_DIM = 0xFF7FA82B.toInt()
-        private const val COLOR_WARNING = 0xFFC77700.toInt()
-        private const val COLOR_BINGE = 0xFFF2622E.toInt()
-        private const val COLOR_DANGER = 0xFFDC2F3C.toInt()
-
-        /**
-         * Mirrors RottoState (lib/utils/rotto_score.dart). An unrecognised
-         * value falls back to `energetic` rather than crashing the launcher.
-         */
-        private fun colorForState(state: String): Int = when (state) {
-            "noEnergy" -> COLOR_DANGER
-            "bingeMode" -> COLOR_BINGE
-            "tired" -> COLOR_WARNING
-            "scrolling" -> COLOR_SAFE_DIM
-            else -> COLOR_SAFE
-        }
+        private const val COLOR_SCORE_TEXT = 0xFF000000.toInt()
 
         private fun characterForState(state: String): Int = when (state) {
             "noEnergy" -> R.drawable.rotto_noenergy
@@ -75,6 +61,53 @@ class BrainfogWidgetProvider : AppWidgetProvider() {
             return if (m == 0) "${h}h" else "${h}h ${m}m"
         }
 
+        @Volatile
+        private var cachedTypeface: Typeface? = null
+
+        /**
+         * Poppins Black (res/font/poppins_black.ttf) loaded in this app's own
+         * process, where custom font resolution actually works -- unlike the
+         * widget's inflated XML layout (see scrolltoll_widget_layout.xml).
+         * Resources.getFont needs API 26; below that we fall back to the
+         * platform bold face rather than crash.
+         */
+        private fun poppinsBlack(context: Context): Typeface {
+            cachedTypeface?.let { return it }
+            val loaded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    context.resources.getFont(R.font.poppins_black)
+                } catch (e: Exception) {
+                    Typeface.DEFAULT_BOLD
+                }
+            } else {
+                Typeface.DEFAULT_BOLD
+            }
+            cachedTypeface = loaded
+            return loaded
+        }
+
+        /**
+         * Renders the score in Poppins Black to a tightly-cropped bitmap, so
+         * the widget can show it via setImageViewBitmap instead of relying on
+         * RemoteViews' unreliable custom-font support.
+         */
+        private fun scoreBitmap(context: Context, text: String, color: Int): Bitmap {
+            val density = context.resources.displayMetrics.density
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                typeface = poppinsBlack(context)
+                textSize = 32f * density
+                this.color = color
+            }
+            val bounds = Rect()
+            paint.getTextBounds(text, 0, text.length, bounds)
+            val width = paint.measureText(text).toInt().coerceAtLeast(1)
+            val height = bounds.height().coerceAtLeast(1)
+
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            Canvas(bitmap).drawText(text, -bounds.left.toFloat(), -bounds.top.toFloat(), paint)
+            return bitmap
+        }
+
         fun updateWidget(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -87,14 +120,15 @@ class BrainfogWidgetProvider : AppWidgetProvider() {
             val score = prefs.getString("rotto_score", "100")?.toIntOrNull() ?: 100
             val state = prefs.getString("rotto_state", "energetic") ?: "energetic"
 
-            val color = colorForState(state)
             val views = RemoteViews(context.packageName, R.layout.scrolltoll_widget_layout)
 
             // Just the number. It is a score out of 100 and reads as one, so
             // "/100" was noise at widget size.
             val headline = if (trackedMinutes == null) "–" else "$score"
-            views.setTextViewText(R.id.widget_remaining, headline)
-            views.setTextColor(R.id.widget_remaining, color)
+            views.setImageViewBitmap(
+                R.id.widget_remaining,
+                scoreBitmap(context, headline, COLOR_SCORE_TEXT),
+            )
 
             views.setImageViewResource(R.id.widget_character, characterForState(state))
 

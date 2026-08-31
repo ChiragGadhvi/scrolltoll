@@ -10,6 +10,8 @@ import '../services/usage_stats_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_registry.dart';
 import '../utils/format_utils.dart';
+import '../utils/rotto_character.dart';
+import '../utils/rotto_score.dart';
 import '../widgets/ui_kit.dart';
 import 'home_screen.dart';
 
@@ -194,8 +196,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Stands on the same purple hill as Home's hero, so the first screen
-        // and the app proper look like one place. Idle bob included, because a
-        // static mascot on the welcome screen reads as a picture, not a pet.
+        // and the app proper look like one place. The idle loop is baked
+        // into the WebP now, so no hand-rolled bob animation here.
         SizedBox(
               height: heroHeight,
               child: Stack(
@@ -212,18 +214,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   Padding(
                     padding: EdgeInsets.only(bottom: heroHeight * 0.07),
-                    child:
-                        Image.asset(
-                              'assets/rotto_base.png',
-                              height: heroHeight * 0.89,
-                              filterQuality: FilterQuality.high,
-                            )
-                            .animate(onPlay: (c) => c.repeat(reverse: true))
-                            .moveY(
-                              end: -9,
-                              duration: 1900.ms,
-                              curve: Curves.easeInOut,
-                            ),
+                    child: Image.asset(
+                      'assets/rotto_base.webp',
+                      height: heroHeight * 0.89,
+                      filterQuality: FilterQuality.high,
+                    ),
                   ),
                 ],
               ),
@@ -298,7 +293,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 child: Transform.scale(
                   scale: 1.15,
                   child: Image.asset(
-                    'assets/rotto_face.png',
+                    RottoCharacter.assetFor(RottoState.energetic),
                     filterQuality: FilterQuality.high,
                   ),
                 ),

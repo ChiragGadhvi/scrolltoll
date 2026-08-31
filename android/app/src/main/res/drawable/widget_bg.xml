@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Light card matching AppColors.card / AppColors.divider. -->
+<!--
+  Matches the Home hero card's own backdrop (AppColors.card -> hillLight, the
+  same gradient _RottoStage paints behind Rotto in lib/screens/home_screen.dart),
+  not a generic light card. Border uses AppColors.divider.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#FFFFFF" />
-    <stroke android:width="1dp" android:color="#E5E5EA" />
+    <gradient
+        android:angle="270"
+        android:startColor="#FFFFFF"
+        android:endColor="#F3F0FA" />
+    <stroke android:width="1dp" android:color="#EBE9F1" />
     <corners android:radius="24dp" />
 </shape>

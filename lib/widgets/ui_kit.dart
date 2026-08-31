@@ -266,13 +266,13 @@ class RottoLoader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Image.asset(
-              'assets/rotto_waiting.png',
-              height: size,
-              filterQuality: FilterQuality.high,
-            )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .moveY(end: -7, duration: 1100.ms, curve: Curves.easeInOut)
-            .scaleXY(end: 1.02, duration: 1100.ms, curve: Curves.easeInOut),
+          'assets/rotto_waiting.webp',
+          // The webp still carries a little padding around Rotto (unlike
+          // the old PNG, cropped almost edge-to-edge), so scale the box up
+          // to keep his rendered size matching `size` as callers expect.
+          height: size * 1.17,
+          filterQuality: FilterQuality.high,
+        ),
         if (message != null) ...[
           const SizedBox(height: 14),
           Text(
@@ -314,8 +314,12 @@ class RottoEmptyState extends StatelessWidget {
       child: Column(
         children: [
           Image.asset(
-            'assets/rotto_empty.png',
-            height: 132,
+            'assets/rotto_empty.webp',
+            // The webp keeps a little padding around Rotto (for the
+            // shrug's raised arms), unlike the old PNG which was cropped
+            // almost edge-to-edge — sized up so he renders at the same
+            // visual size as before, not just the same box height.
+            height: 157,
             filterQuality: FilterQuality.high,
           ),
           const SizedBox(height: 16),

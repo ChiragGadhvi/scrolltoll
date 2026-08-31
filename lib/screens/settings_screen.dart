@@ -206,12 +206,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// Every mood Rotto has, with the pose and the screen time that earns it.
+/// Every mood Rotto has, with the pose and the screen time that earns it, as
+/// a swipeable carousel of cards rather than a stacked list.
 ///
 /// Thresholds come from [RottoScore.moodStartMinutes], so this list cannot drift
 /// from the ladder the rest of the app computes with.
-class _MoodLegend extends StatelessWidget {
+class _MoodLegend extends StatefulWidget {
   const _MoodLegend();
+
+  @override
+  State<_MoodLegend> createState() => _MoodLegendState();
+}
+
+class _MoodLegendState extends State<_MoodLegend> {
+  final _controller = PageController(viewportFraction: 1);
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,35 +234,74 @@ class _MoodLegend extends StatelessWidget {
     final starts = RottoScore.moodStartMinutes;
     final states = RottoState.values;
 
-    return SoftCard(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-      child: Column(
-        children: [
-          for (var i = 0; i < states.length; i++) ...[
-            if (i > 0) const Divider(),
-            _MoodRow(
-              state: states[i],
-              fromMinutes: starts[states[i]] ?? 0,
-              // The last rung runs to the end of the day, so it has no ceiling.
-              toMinutes: i + 1 < states.length
-                  ? (starts[states[i + 1]] ?? 0) - 1
-                  : null,
-              textTheme: textTheme,
-            ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 340,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: states.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (context, i) {
+              return AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  var scale = 1.0;
+                  if (_controller.position.haveDimensions) {
+                    final delta = (_controller.page ?? _page.toDouble()) - i;
+                    scale = (1 - delta.abs() * 0.15).clamp(0.85, 1.0);
+                  }
+                  return Center(
+                    child: Transform.scale(scale: scale, child: child),
+                  );
+                },
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: _MoodCard(
+                    state: states[i],
+                    fromMinutes: starts[states[i]] ?? 0,
+                    // The last rung runs to the end of the day, so it has no ceiling.
+                    toMinutes: i + 1 < states.length
+                        ? (starts[states[i + 1]] ?? 0) - 1
+                        : null,
+                    textTheme: textTheme,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (var i = 0; i < states.length; i++)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _page == i ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _page == i
+                      ? RottoCharacter.colorFor(states[i])
+                      : AppColors.divider,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
           ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _MoodRow extends StatelessWidget {
+class _MoodCard extends StatelessWidget {
   final RottoState state;
   final int fromMinutes;
   final int? toMinutes;
   final TextTheme textTheme;
 
-  const _MoodRow({
+  const _MoodCard({
     required this.state,
     required this.fromMinutes,
     required this.toMinutes,
@@ -264,13 +318,14 @@ class _MoodRow extends StatelessWidget {
         ? 'Up to ${formatDuration(to)}'
         : '${formatDuration(fromMinutes)} – ${formatDuration(to)}';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
+    return SoftCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 160,
+            height: 160,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: color.withValues(alpha: 0.10),
@@ -278,7 +333,7 @@ class _MoodRow extends StatelessWidget {
             ),
             child: ClipOval(
               child: Transform.scale(
-                scale: 1.3,
+                scale: 1.55,
                 child: Image.asset(
                   RottoCharacter.assetFor(state),
                   fit: BoxFit.contain,
@@ -287,50 +342,39 @@ class _MoodRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      RottoCharacter.nameFor(state),
-                      style: textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: Text(
-                        range,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                          fontFeatures: tabularFigures,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  RottoCharacter.captionFor(state),
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 16),
+          Text(
+            RottoCharacter.nameFor(state),
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              range,
+              style: textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontFeatures: tabularFigures,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            RottoCharacter.captionFor(state),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.35,
             ),
           ),
         ],

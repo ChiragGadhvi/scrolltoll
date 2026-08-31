@@ -6,6 +6,15 @@
   the old 4x2 layout assumed. Filenames stay from the ScrollToll era on purpose;
   widget_character/widget_remaining keep their ids so the provider's references
   stay stable.
+
+  widget_remaining is an ImageView, not a TextView: AppWidget layouts are
+  inflated by the launcher/widget host, not this app's process, and custom
+  XML fonts (android:fontFamily) are unreliable in that inflation path across
+  OEM launchers — confirmed on-device even after a clean reinstall. Instead
+  BrainfogWidgetProvider.kt renders the score to a bitmap with Poppins Black
+  (res/font/poppins_black.ttf, same file as assets/fonts/Poppins-Black.ttf)
+  in its own process, where font loading is guaranteed to work, and hands it
+  over with setImageViewBitmap.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -26,16 +35,12 @@
         android:scaleType="fitCenter"
         android:contentDescription="@string/widget_character_description" />
 
-    <TextView
+    <ImageView
         android:id="@+id/widget_remaining"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:gravity="center"
-        android:text="@string/widget_remaining_placeholder"
-        android:textColor="#1B9E4B"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:includeFontPadding="false" />
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/widget_remaining_placeholder" />
 </LinearLayout>
