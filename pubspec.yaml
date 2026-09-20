@@ -2,7 +2,7 @@ name: scrolltoll
 description: "Rotto - A friendly screen-time companion for the apps you choose"
 publish_to: 'none'
 
-version: 2.1.1+12
+version: 2.1.2+13
 
 environment:
   sdk: ^3.11.3
